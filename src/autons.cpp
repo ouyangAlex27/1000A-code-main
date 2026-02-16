@@ -115,14 +115,114 @@ void holonomic_odom_test(){
   chassis.holonomic_drive_to_pose(0, 18, 270);
   chassis.holonomic_drive_to_pose(0, 0, 0);
 }
+void first_skills(){
+  Wings.set(true);
+  //grab ball
+  intake.spin(fwd, 100, percentUnits::pct);
+  topGoal.spin(reverse, 100, percentUnits::pct);
+  chassis.right_swing_to_angle(-35, 12, 1, 300, 700, .3, .003, 2.1, 15);
+  chassis.drive_distance(19.5, -35, 8, 8, 1, 300, 800);
+  
+  //wait(400, msec);
+  intake.stop();
+  
+  //score top mid
+  chassis.turn_to_angle(-135, 12, 1, 300, 700);
+  intake.spin(reverse, 10, percentUnits::pct);
+  topGoal.spin(reverse, 30, percentUnits::pct);
+  matchLoad.set(true);
+  chassis.drive_distance(-17, -135, 10, 10, 1, 300, 700);
+  chassis.DriveL.spin(reverse, 1, voltageUnits::volt);
+  chassis.DriveR.spin(reverse, 1, voltageUnits::volt);
+   
+  DigitalOutC.set(true);
+  topGoal.stop();
+  intake.spin(fwd, 80, percentUnits::pct);
+  wait(600, msec);
+  intake.stop();
+  chassis.DriveL.stop(hold);
+  chassis.DriveR.stop(hold);
 
+  //grab matchloads1
+  chassis.drive_distance(41, -135, 10, 10, 1, 300, 1200);
+  DigitalOutC.set(false);
+  chassis.turn_to_angle(180, 12, 1, 300, 800);
+  intake.spin(fwd, 100, percentUnits::pct);
+  chassis.drive_distance(15, 180, 8, 8, 1, 300, 900);
+  wait(1400, msec);
+  //score top
+  chassis.drive_distance(-16, 180, 10, 10, 1, 300, 700);
+// first half
+  topGoal.stop();
+  chassis.turn_to_angle(-225, 12, 1, 300, 800);
+  chassis.drive_distance(-16, -225, 10, 10, 1, 300, 700);
+  chassis.turn_to_angle(180, 12, 1, 300, 800);
+  matchLoad.set(false);
+  chassis.drive_distance(-46, 180, 10, 10, 1, 300, 1200);
+  chassis.turn_to_angle(225, 12, 1, 300, 800);
+  chassis.drive_distance(-14, 225, 10, 10, 1, 300, 700);
+  intake.stop();
+  chassis.turn_to_angle(360, 12, 1, 300, 800);
+  chassis.drive_distance(-13, 360, 10, 10, 1, 300, 700);
+  matchLoad.set(true);
+  topGoal.spin(fwd, 100, percentUnits::pct);
+  intake.spin(fwd, 100, percentUnits::pct);
+  wait(1900, msec);
+  topGoal.stop();
+}
+void second_skills(){
+  Wings.set(true);
+  matchLoad.set(true);
+  topGoal.stop(hold);
+  intake.spin(fwd, 100, percentUnits::pct);
+  chassis.drive_distance(25.5, 0, 6, 6, 1, 300, 1500);
+  wait(1400, msec);
+  chassis.drive_distance(-25.5, 0, 9, 9, 1, 300, 800);
+  topGoal.spin(fwd, 100, percentUnits::pct);
+  wait(1700, msec);
+  matchLoad.set(false);
+  topGoal.stop();
+  intake.spin(fwd, 100, percentUnits::pct);
+  chassis.drive_distance(16, 0, 10, 10, 1, 300, 800);
+  chassis.left_swing_to_angle(65, 12, 1, 300, 800, .3, .003, 2.1, 15);
+  chassis.drive_distance(20, 65, 8, 8, 1, 300, 800);
+  chassis.turn_to_angle(80, 6, 1, 300, 600);
+
+  chassis.drive_distance(18, 80, 10, 10, 1, 300, 900);
+  matchLoad.set(true);
+  chassis.drive_distance(35, 80, 8, 8, 1, 300, 1500);
+  
+  intake.stop();
+  topGoal.stop();
+  chassis.turn_to_angle(90, 6, 1, 300, 600);
+  chassis.drive_distance(-16, 90, 3, 3, 1, 300, 1500);
+  chassis.left_swing_to_angle(180, 12, 1, 300, 800, .3, .003, 2.1, 15);
+  matchLoad.set(true);
+  chassis.drive_distance(26, 180, 7, 7, 1, 300, 1000);
+  
+  intake.spin(reverse, 10, percentUnits::pct);
+  topGoal.spin(reverse, 30, percentUnits::pct);
+  chassis.turn_to_angle(45, 12, 1, 300, 800);
+  chassis.drive_distance(-18.7, 45, 10, 10, 1, 300, 700);
+  DigitalOutC.set(true);
+  intake.spin(fwd, 100, percentUnits::pct);
+  topGoal.spin(fwd, 100, percentUnits::pct);
+  wait(3000, msec);
+  DigitalOutC.set(false);
+}
+void third_skills(){
+
+}
+void fourth_skills(){
+
+}
 void skills(){
   Wings.set(true);
   //grab ball
   intake.spin(fwd, 100, percentUnits::pct);
   topGoal.spin(reverse, 100, percentUnits::pct);
   chassis.right_swing_to_angle(-35, 12, 1, 300, 700, .3, .003, 2.1, 15);
-  chassis.drive_distance(19.5, -35, 8, 8, 1, 300, 700);
+  chassis.drive_distance(19.5, -35, 8, 8, 1, 300, 800);
   
   //wait(400, msec);
   intake.stop();
@@ -147,7 +247,7 @@ void skills(){
   wait(1500, msec);
   //score top
   chassis.drive_distance(-17, 180, 10, 10, 1, 300, 700);
-  
+// first half
   topGoal.stop();
   chassis.turn_to_angle(-225, 12, 1, 300, 800);
   chassis.drive_distance(-16, -225, 10, 10, 1, 300, 700);

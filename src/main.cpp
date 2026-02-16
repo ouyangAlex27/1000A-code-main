@@ -177,7 +177,8 @@ void pre_auton() {
 
 void autonomous(void) {
   auto_started = true;
-  skills();
+  //first_skills();
+  second_skills();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -271,8 +272,8 @@ void usercontrol(void) {
     // Mid goal (L1): pneumatics + both motors at 90
     if (controller67.ButtonL1.pressing()) {
       DigitalOutC.set(true);
-      topCmd = 90;
-      if (intakeCmd == 0) intakeCmd = 90;
+      topCmd = -90;
+      if (intakeCmd == 0) intakeCmd = 100;
     }
 
     // Matchload
@@ -286,26 +287,7 @@ void usercontrol(void) {
     }
 
     // ---------------- special “B” routine (your existing clear) ----------------
-    if (controller67.ButtonB.pressing()) {
-      matchLoad.set(true);
 
-      topGoal.setVelocity(50, vex::percent);
-      topGoal.spin(vex::reverse);
-
-      intake.setVelocity(15, vex::percent);
-      intake.spin(vex::reverse);
-
-      vex::wait(1500, vex::msec);
-
-      topGoal.stop();
-      intake.stop();
-
-      topGoal.setVelocity(100, vex::percent);
-      intake.setVelocity(100, vex::percent);
-
-      // reset anti-jam so it doesn’t immediately reverse again
-      intakeAJ = AntiJamState{};
-    }
     else {
       // ---------------- apply motors normally ----------------
 
