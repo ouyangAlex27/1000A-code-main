@@ -280,8 +280,8 @@ void Drive::turn_to_angle(float angle, float turn_max_voltage, float turn_settle
  * Drive distance does not optimize for direction, so it won't try
  * to drive at the opposite heading from the one given to get there faster.
  * You can control the heading, but if you choose not to, it will drive with the
- * heading it's currently facing. It uses the average of the left and right
- * motor groups to calculate distance driven.
+ * heading it's currently facing. It uses the forward tracking wheel to
+ * calculate distance driven.
  * 
  * @param distance Desired distance in inches.
  * @param heading Desired heading in degrees.
@@ -306,11 +306,16 @@ void Drive::drive_distance(float distance, float heading, float drive_max_voltag
 void Drive::drive_distance(float distance, float heading, float drive_max_voltage, float heading_max_voltage, float drive_settle_error, float drive_settle_time, float drive_timeout, float drive_kp, float drive_ki, float drive_kd, float drive_starti, float heading_kp, float heading_ki, float heading_kd, float heading_starti){
   PID drivePID(distance, drive_kp, drive_ki, drive_kd, drive_starti, drive_settle_error, drive_settle_time, drive_timeout);
   PID headingPID(reduce_negative_180_to_180(heading - get_absolute_heading()), heading_kp, heading_ki, heading_kd, heading_starti);
-  float start_average_position = (get_left_position_in()+get_right_position_in())/2.0;
-  float average_position = start_average_position;
+
+  // get_ForwardTracker_position() already converts sensor degrees to inches.
+  // Saving the starting position makes each drive_distance() command relative
+  // to wherever the tracking wheel was when the command began.
+  float start_tracker_position = get_ForwardTracker_position();
+
   while(drivePID.is_settled() == false){
-    average_position = (get_left_position_in()+get_right_position_in())/2.0;
-    float drive_error = distance+start_average_position-average_position;
+    float tracker_position = get_ForwardTracker_position();
+    float distance_traveled = tracker_position - start_tracker_position;
+    float drive_error = distance - distance_traveled;
     float heading_error = reduce_negative_180_to_180(heading - get_absolute_heading());
     float drive_output = drivePID.compute(drive_error);
     float heading_output = headingPID.compute(heading_error);
@@ -321,6 +326,10 @@ void Drive::drive_distance(float distance, float heading, float drive_max_voltag
     drive_with_voltage(drive_output+heading_output, drive_output-heading_output);
     task::sleep(10);
   }
+
+  // A timeout can occur while the output is still nonzero. Explicitly stop so
+  // the drivetrain never retains the final voltage from the PID loop.
+  drive_stop(brake);
 }
 
 /**

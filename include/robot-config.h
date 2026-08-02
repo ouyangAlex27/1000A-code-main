@@ -14,6 +14,14 @@ extern digital_out matchLoad;
 extern digital_out DigitalOutC;
 extern digital_out Wings;
 extern inertial inertialS;
+extern distance distanceB;
+extern motor intakeL;
+extern motor intakeR;
+extern motor Cascade;
+extern rotation rotationCascade;
+extern rotation rotationTwoBar;
+extern motor twoBar_1;
+extern motor twoBar_2;
 //To set up a extern called LeftFront here, you'd use
 //extern extern LeftFront;
 

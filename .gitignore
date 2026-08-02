@@ -1,3 +1,8 @@
-/bin
-/build
-compile_commands.json
+# Compiled VEX files
+build/
+*.bin
+*.elf
+
+# Operating-system files
+.DS_Store
+Thumbs.db
