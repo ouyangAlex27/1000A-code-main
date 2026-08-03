@@ -12,7 +12,7 @@ extern motor topGoal;
 extern controller controller67;
 extern digital_out matchLoad;
 extern digital_out DigitalOutC;
-extern digital_out Wings;
+extern digital_out claw;
 extern inertial inertialS;
 extern distance distanceB;
 extern motor intakeL;

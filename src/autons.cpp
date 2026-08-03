@@ -14,14 +14,16 @@
  
 void default_constants(){
   // Each constant set is in the form of (maxVoltage, kP, kI, kD, startI).
-  chassis.set_drive_constants(10, 0.6, 0, 8, 0);
+  //  chassis.set_turn_constants(12, 0.29, .0053, 1.84, 15);
+  chassis.set_drive_constants(10, 0.5001, 0.0041, 1.5, 10);  
   chassis.set_heading_constants(6, .5, 0, 0.9, 0);
-  chassis.set_turn_constants(12, .4, .03, 3, 15);
+  chassis.set_turn_constants(12, 0.2955, .0054, 1.8335, 15);
   chassis.set_swing_constants(12, .3, .003, 2.1, 15);
+
 
   // Each exit condition set is in the form of (settle_error, settle_time, timeout).
   chassis.set_drive_exit_conditions(0.5, 300, 5000);
-  chassis.set_turn_exit_conditions(0.5, 300, 3000);
+  chassis.set_turn_exit_conditions(0.5, 300, 1000);
   chassis.set_swing_exit_conditions(1, 300, 3000);
 }
 
@@ -61,39 +63,47 @@ void odom_constants(){
  * A little of this, a little of that; it should end roughly where it started.
  */
 
-void tracker_test() {
-  double startingPosition =
-      chassis.get_ForwardTracker_position();
+void individual_motor_test() {
+  leftF.spin(fwd, 8, volt);
+  wait(1000, msec);
+  leftF.stop(brake);
 
-  while (true) {
-    double currentPosition =
-        chassis.get_ForwardTracker_position();
+  wait(500, msec);
 
-    Brain.Screen.clearScreen();
+  leftM.spin(fwd, 8, volt);
+  wait(1000, msec);
+  leftM.stop(brake);
 
-    Brain.Screen.printAt(
-        5, 20,
-        "Start: %.2f",
-        startingPosition);
+  wait(500, msec);
 
-    Brain.Screen.printAt(
-        5, 40,
-        "Current: %.2f",
-        currentPosition);
+  leftB.spin(fwd, 8, volt);
+  wait(1000, msec);
+  leftB.stop(brake);
 
-    Brain.Screen.printAt(
-        5, 60,
-        "Change: %.2f",
-        currentPosition - startingPosition);
+  wait(500, msec);
 
-    wait(100, msec);
-  }
+  rightF.spin(fwd, 8, volt);
+  wait(1000, msec);
+  rightF.stop(brake);
+
+  wait(500, msec);
+
+  rightM.spin(fwd, 8, volt);
+  wait(1000, msec);
+  rightM.stop(brake);
+
+  wait(500, msec);
+
+  rightB.spin(fwd, 8, volt);
+  wait(1000, msec);
+  rightB.stop(brake);
 }
+
 
 void PID_test() {
   chassis.drive_max_voltage = 10;
-
-  chassis.drive_distance(36);
+  chassis.turn_to_angle(180);
+  //chassis.drive_distance(-36);
 
 }
 
@@ -170,10 +180,31 @@ void forwardDrive(){
   chassis.drive_distance(-3);
 }
 
-void left_side(){
-  
+void good_side() {
+  autonMoveTwoBarToAngle(-30, 300);
+  chassis.set_drive_exit_conditions(
+      0.5,   
+      300,   
+      800 
+  );
 
+  chassis.drive_distance(6);
+  autonMoveTwoBarToAngle(-5, 300);
+  chassis.set_drive_exit_conditions(0.5, 300, 800);
+   wait(300, msec);
+  claw.set(true);
+  chassis.drive_distance(-8);
+  autonSetPickupPosition(2000);
+   chassis.turn_to_angle(-55);
+  chassis.drive_distance(21, -55,10,6,0.5,300,900);
+  autonClampAndSetHoldingHeight(1, 1000);
+  chassis.turn_to_angle(-115);
+  chassis.drive_distance(-17);
+  autonMoveToScoringPosition(1, 2500);
+  autonRunReturnAnimation(2000);
+  chassis.turn_to_angle(180);
 }
+
 
 void skillsBarrierCross(){
   

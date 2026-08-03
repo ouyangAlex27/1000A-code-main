@@ -207,7 +207,7 @@ constexpr double TWOBAR_MOTOR_DEG_PER_ARM_DEG = 48.0 / 12.0;
 //arm angles at each Cascade position
 constexpr double R2_ARM_SCORE_ANGLE_DEG = -250;     
 constexpr double DOWN_ARM_SCORE_ANGLE_DEG = -230;   
-constexpr double RIGHT_ARM_SCORE_ANGLE_DEG = -215;  
+constexpr double RIGHT_ARM_SCORE_ANGLE_DEG = -210;  
 constexpr double Y_ARM_SCORE_ANGLE_DEG = -185;      
 constexpr double B_ARM_SCORE_ANGLE_DEG = -185;     
 
@@ -270,8 +270,8 @@ volatile double twoBarLastLeftVoltage = 0.0;
 volatile double twoBarLastRightVoltage = 0.0;
 volatile bool twoBarStallFault = false;
 
-constexpr bool CLAW_OPEN_STATE = false;
-constexpr bool CLAW_CLAMPED_STATE = true;
+constexpr bool CLAW_OPEN_STATE = true;
+constexpr bool CLAW_CLAMPED_STATE = false;
 
 /**
  * Function before autonomous. It prints the current auton number on the screen
@@ -518,7 +518,7 @@ int TwoBarPIDTask() {
 
 void autonomous() {
   auto_started = true;
-  PID_test();
+  good_side();
 }
 
 /*---------------------------------------------------------------------------*/
@@ -536,7 +536,7 @@ void autonomous() {
 // Five scoring stages. Zero is reserved for the open-claw pickup state.
 const double CASCADE_STAGE_1 = 850;
 const double CASCADE_STAGE_2 = 1500;
-const double CASCADE_STAGE_3 = 2850;
+const double CASCADE_STAGE_3 = 3000;
 const double CASCADE_STAGE_4 = 4900;
 const double CASCADE_STAGE_5 = 7560.0;
 
@@ -590,16 +590,271 @@ void setTwoBarTarget(double target) {
   twoBarPIDEnabled = true;
 }
 
+// One shared stage table for both driver control and autonomous.
+// armScoreTargetMotorDeg is already converted through the 1:4 gear ratio.
+bool getMechanismStageTargets(
+    int stage,
+    double &cascadeHeightDeg,
+    double &armScoreTargetMotorDeg) {
+  switch (stage) {
+    case 1:
+      cascadeHeightDeg = CASCADE_STAGE_1;
+      armScoreTargetMotorDeg =
+          armAngleToMotorDegrees(R2_ARM_SCORE_ANGLE_DEG);
+      return true;
+    case 2:
+      cascadeHeightDeg = CASCADE_STAGE_2;
+      armScoreTargetMotorDeg =
+          armAngleToMotorDegrees(DOWN_ARM_SCORE_ANGLE_DEG);
+      return true;
+    case 3:
+      cascadeHeightDeg = CASCADE_STAGE_3;
+      armScoreTargetMotorDeg =
+          armAngleToMotorDegrees(RIGHT_ARM_SCORE_ANGLE_DEG);
+      return true;
+    case 4:
+      cascadeHeightDeg = CASCADE_STAGE_4;
+      armScoreTargetMotorDeg =
+          armAngleToMotorDegrees(Y_ARM_SCORE_ANGLE_DEG);
+      return true;
+    case 5:
+      cascadeHeightDeg = CASCADE_STAGE_5;
+      armScoreTargetMotorDeg =
+          armAngleToMotorDegrees(B_ARM_SCORE_ANGLE_DEG);
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool waitForCascadePIDTarget(
+    double targetDeg,
+    double toleranceDeg,
+    double timeoutMsec) {
+  timer timeoutTimer;
+  timeoutTimer.reset();
+
+  while (timeoutTimer.time(msec) < timeoutMsec) {
+    if (std::fabs(
+            targetDeg - rotationCascade.position(degrees))
+        <= toleranceDeg) {
+      return true;
+    }
+
+    wait(10, msec);
+  }
+
+  // Keep the PID enabled so it can continue holding/approaching its target.
+  return false;
+}
+
+bool waitForTwoBarPIDTarget(
+    double targetMotorDeg,
+    double positionToleranceDeg,
+    double syncToleranceDeg,
+    double timeoutMsec) {
+  timer timeoutTimer;
+  timeoutTimer.reset();
+
+  while (timeoutTimer.time(msec) < timeoutMsec) {
+    double leftPosition = twoBar_1.position(degrees);
+    double rightPosition = twoBar_2.position(degrees);
+    double averagePosition =
+        (leftPosition + rightPosition) / 2.0;
+    double syncError = leftPosition - rightPosition;
+
+    if (std::fabs(targetMotorDeg - averagePosition)
+            <= positionToleranceDeg &&
+        std::fabs(syncError) <= syncToleranceDeg) {
+      return true;
+    }
+
+    // The two-bar PID disables itself if it detects a stall. Do not let that
+    // freeze the rest of autonomous.
+    if (twoBarStallFault) {
+      return false;
+    }
+
+    wait(10, msec);
+  }
+
+  return false;
+}
+
+bool autonSetPickupPosition(double timeoutMsec) {
+  // Open claw.
+  claw.set(CLAW_OPEN_STATE);
+
+  // Return arm to the front first.
+  setTwoBarTarget(TWOBAR_FRONT_DEG);
+
+  if (!waitForTwoBarPIDTarget(
+          TWOBAR_FRONT_DEG,
+          TWOBAR_FRONT_TOLERANCE_DEG,
+          TWOBAR_SYNC_READY_TOLERANCE_DEG,
+          timeoutMsec)) {
+    return false;
+  }
+
+  // Lower cascade after the arm is safely in front.
+  setCascadeTarget(CLAW_OPEN_CASCADE_HEIGHT);
+
+  return waitForCascadePIDTarget(
+      CLAW_OPEN_CASCADE_HEIGHT,
+      CASCADE_SEQUENCE_READY_TOLERANCE_DEG,
+      timeoutMsec);
+}
+
+bool autonMoveTwoBarToAngle(
+    double armAngleDeg,
+    double timeoutMsec) {
+
+  // Converts actual arm angle through the 1:4 gearing.
+  double targetMotorDeg =
+      armAngleToMotorDegrees(armAngleDeg);
+
+  setTwoBarTarget(targetMotorDeg);
+
+  return waitForTwoBarPIDTarget(
+      targetMotorDeg,
+      TWOBAR_HOLD_ERROR_DEG,
+      TWOBAR_SYNC_READY_TOLERANCE_DEG,
+      timeoutMsec);
+}
+
+// Autonomous state 1: arm at the front and cascade at the selected holding
+// height. Stages 1-5 use the exact same presets as the driver buttons.
+bool autonSetHoldingHeight(int stage, double timeoutMsec) {
+  double cascadeHeightDeg = 0.0;
+  double unusedArmScoreTarget = 0.0;
+
+  if (!getMechanismStageTargets(
+          stage, cascadeHeightDeg, unusedArmScoreTarget)) {
+    return false;
+  }
+
+  setTwoBarTarget(TWOBAR_FRONT_DEG);
+  if (!waitForTwoBarPIDTarget(
+          TWOBAR_FRONT_DEG,
+          TWOBAR_FRONT_TOLERANCE_DEG,
+          TWOBAR_SYNC_READY_TOLERANCE_DEG,
+          timeoutMsec)) {
+    return false;
+  }
+
+  setCascadeTarget(cascadeHeightDeg);
+  return waitForCascadePIDTarget(
+      cascadeHeightDeg,
+      CASCADE_SEQUENCE_READY_TOLERANCE_DEG,
+      timeoutMsec);
+}
+
+// Nonblocking: the background PID keeps moving the arm while autonomous
+// immediately continues to driving or another mechanism command.
+void autonStartTwoBarToAngle(double armAngleDeg) {
+  setTwoBarTarget(armAngleToMotorDegrees(armAngleDeg));
+}
+
+// Optional pickup helper: clamp first, wait for the pneumatic clamp to finish,
+// then run the normal holding-height state.
+bool autonClampAndSetHoldingHeight(int stage, double timeoutMsec) {
+  claw.set(CLAW_CLAMPED_STATE);
+  wait(CLAW_CLOSE_LIFT_DELAY_MSEC, msec);
+  return autonSetHoldingHeight(stage, timeoutMsec);
+}
+
+// Autonomous state 2: ensure the cascade is at the selected stage, then move
+// the arm to that stage's independently tuned scoring angle.
+bool autonMoveToScoringPosition(int stage, double timeoutMsec) {
+  double cascadeHeightDeg = 0.0;
+  double armScoreTargetMotorDeg = 0.0;
+
+  if (!getMechanismStageTargets(
+          stage, cascadeHeightDeg, armScoreTargetMotorDeg)) {
+    return false;
+  }
+
+  if (std::fabs(
+          cascadeHeightDeg - rotationCascade.position(degrees))
+      > CASCADE_SEQUENCE_READY_TOLERANCE_DEG) {
+    if (!autonSetHoldingHeight(stage, timeoutMsec)) {
+      return false;
+    }
+  }
+
+  setTwoBarTarget(armScoreTargetMotorDeg);
+  return waitForTwoBarPIDTarget(
+      armScoreTargetMotorDeg,
+      SCORE_ARM_READY_TOLERANCE_DEG,
+      TWOBAR_SYNC_READY_TOLERANCE_DEG,
+      timeoutMsec);
+}
+
+// Autonomous state 3: the same full animation that opening the claw starts in
+// driver control: release, wait, bump the cascade, return the arm to zero, and
+// return the cascade to its default closed-claw height.
+bool autonRunReturnAnimation(double timeoutMsec) {
+  claw.set(CLAW_OPEN_STATE);
+
+  // Finish any scoring-arm movement before starting the release delay.
+  double scoringArmTarget = twoBarTargetDeg;
+  if (!waitForTwoBarPIDTarget(
+          scoringArmTarget,
+          SCORE_ARM_READY_TOLERANCE_DEG,
+          TWOBAR_SYNC_READY_TOLERANCE_DEG,
+          timeoutMsec)) {
+    return false;
+  }
+
+  wait(SCORE_RELEASE_DELAY_MSEC, msec);
+
+  double bumpTarget = cascadeTargetDeg + SCORE_CASCADE_BUMP_DEG;
+  if (bumpTarget > CASCADE_MAX_POSITION_DEG) {
+    bumpTarget = CASCADE_MAX_POSITION_DEG;
+  }
+
+  setCascadeTarget(bumpTarget);
+  if (!waitForCascadePIDTarget(
+          bumpTarget,
+          CASCADE_SEQUENCE_READY_TOLERANCE_DEG,
+          timeoutMsec)) {
+    return false;
+  }
+
+  setTwoBarTarget(TWOBAR_FRONT_DEG);
+  if (!waitForTwoBarPIDTarget(
+          TWOBAR_FRONT_DEG,
+          TWOBAR_FRONT_TOLERANCE_DEG,
+          TWOBAR_SYNC_READY_TOLERANCE_DEG,
+          timeoutMsec)) {
+    return false;
+  }
+
+  setCascadeTarget(CLAW_CLOSED_CASCADE_HEIGHT);
+  return waitForCascadePIDTarget(
+      CLAW_CLOSED_CASCADE_HEIGHT,
+      CASCADE_SEQUENCE_READY_TOLERANCE_DEG,
+      timeoutMsec);
+}
+
 void handleThreePressSequence(
-    int buttonId,
-    double cascadeHeight,
-    double armScoreTarget,
+    int stage,
     int &activeButton,
     int &sequenceStep,
     bool &cascadeMoveQueued,
     double &queuedCascadeTarget,
     double &queuedArmScoreTarget,
     bool &scoreMoveQueued) {
+
+  double cascadeHeight = 0.0;
+  double armScoreTarget = 0.0;
+
+  if (!getMechanismStageTargets(
+          stage, cascadeHeight, armScoreTarget)) {
+    return;
+  }
+
+  int buttonId = stage - 1;
 
   if (activeButton != buttonId || sequenceStep == 0) {
     activeButton = buttonId;
@@ -731,27 +986,27 @@ void usercontrol(void) {
         setCascadeTarget(CLAW_OPEN_CASCADE_HEIGHT);
       }
 
-      handleThreePressSequence(0, CASCADE_STAGE_1, armAngleToMotorDegrees(R2_ARM_SCORE_ANGLE_DEG), activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
+      handleThreePressSequence(1, activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
     }
 
     if (scoreReturnState == SCORE_RETURN_IDLE &&currentDown && !previousDown) {
       defaultCascadeMode = false;
-      handleThreePressSequence(1, CASCADE_STAGE_2, armAngleToMotorDegrees(DOWN_ARM_SCORE_ANGLE_DEG), activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
+      handleThreePressSequence(2, activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
     }
 
     if (scoreReturnState == SCORE_RETURN_IDLE && currentRight && !previousRight) {
       defaultCascadeMode = false;
-      handleThreePressSequence(2,CASCADE_STAGE_3, armAngleToMotorDegrees(RIGHT_ARM_SCORE_ANGLE_DEG), activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
+      handleThreePressSequence(3, activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
     }
 
     if (scoreReturnState == SCORE_RETURN_IDLE && currentY && !previousY) {
       defaultCascadeMode = false;
-      handleThreePressSequence(3, CASCADE_STAGE_4, armAngleToMotorDegrees(Y_ARM_SCORE_ANGLE_DEG), activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
+      handleThreePressSequence(4, activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
     }
 
     if (scoreReturnState == SCORE_RETURN_IDLE && currentB && !previousB) {
       defaultCascadeMode = false;
-      handleThreePressSequence(4, CASCADE_STAGE_5, armAngleToMotorDegrees(B_ARM_SCORE_ANGLE_DEG), activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
+      handleThreePressSequence(5, activeSequenceButton, sequenceStep, cascadeMoveQueued, queuedCascadeTarget, queuedArmScoreTarget, scoreMoveQueued);
     }
 
     previousDown = currentDown;

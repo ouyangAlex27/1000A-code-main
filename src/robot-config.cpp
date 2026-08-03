@@ -10,7 +10,7 @@ motor leftF = motor(PORT1,ratio18_1, true);
 motor leftM = motor(PORT12,ratio18_1, true);
 motor leftB = motor(PORT11,ratio18_1, true);
 
-motor rightF = motor(PORT10,ratio18_1, false );
+motor rightF = motor(PORT5,ratio18_1, false );
 motor rightM = motor(PORT19,ratio18_1, false);
 motor rightB = motor(PORT20,ratio18_1, false);
 
